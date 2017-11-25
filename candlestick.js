@@ -1,174 +1,171 @@
+// chart sizes
+var space   = 4,
+    margin  = {right: 90, bottom: 60}
+    padding = {left: 5, right: 5, top: 5, bottom: 5},
+    chart   = {width: 555, height: 360},
+    dateAxisOffset = 35,
+    minimumCandleHeight = 0.1;
 
-// sizes
-var marginRight = 90, marginBottom = 63, space = 4,
-    paddingLeft = 5, paddingRight = 5, paddingTop = 5, paddingBottom = 5,
-    chartWidth = 555, chartHeight = 360,
-    yearOffset = 35,
-    minimumCandleHeight = 0.1,
-    svgWidth = chartWidth + marginRight,
-    svgHeight = chartHeight + marginBottom;
 var barWidth = 0;
 var dataset;
 
 // svg chart
-var chart = d3.select("body")
+var svg = d3.select("body")
     .append("svg")
-        .attr("width", svgWidth)
-        .attr("height", svgHeight);
+        .attr("width", chart.width + margin.right)
+        .attr("height", chart.height + margin.bottom);
 
-// scale
-var yScale = d3.scale.linear().range([chartHeight, 0]); // domain is dataset-dependent
-var xScale = d3.time.scale().range([0, chartWidth]); // domain is dataset-dependent
+// scales (domain() values will be set after data is loaded)
+var yScale = d3.scale.linear().range([chart.height, 0]);
+var xScale = d3.time.scale().range([0, chart.width]);
+
 // axis layout
 var xAxisTime = d3.svg.axis().orient("bottom").ticks(8).tickFormat(d3.time.format("%H:%M"));
 var xAxisDate = d3.svg.axis().orient("bottom").ticks(d3.time.days, 1).tickFormat(d3.time.format("%Y-%m-%d"));
-var yAxis = d3.svg.axis().orient("right").ticks(5).tickFormat(d3.format(".8f"));
-// axis group
-var xAxisTimeGroup = chart.append("g")
-    .attr("transform", "translate("+paddingLeft+", " + (chartHeight+10)+ ")")
+var yAxis     = d3.svg.axis().orient("right").ticks(5).tickFormat(d3.format(".8f"));
+
+// axis group (later it will call() the axis layouts)
+var xAxisTimeGroup = svg.append("g")
+    .attr("transform", "translate(" + padding.left + ", " + (chart.height + 10) + ")")
     .attr("id", "xAxisTimeGroup")
     .attr("class", "axis time");
-var xAxisDateGroup = chart.append("g")
-    .attr("transform", "translate("+paddingLeft+", " + (chartHeight+yearOffset)+ ")")
+var xAxisDateGroup = svg.append("g")
+    .attr("transform", "translate(" + padding.left + ", " + (chart.height + dateAxisOffset) + ")")
     .attr("id", "xAxisDateGroup")
     .attr("class", "axis day");
-var yAxisGroup = chart.append("g")
-    .attr("transform", "translate(" + (paddingLeft + chartWidth + paddingRight)+ ", " + paddingTop + " )")
+var yAxisGroup = svg.append("g")
+    .attr("transform", "translate(" + (padding.left + chart.width + padding.right)+ ", " + padding.top + ")")
     .attr("id", "yAxisGroup")
     .attr("class", "axis y");
 
+// crosshairs
+var crosshairGroup = svg.append('g')
+    .attr("id", "crosshairGroup");
+crosshairGroup.append('line')
+    .attr('id', 'crosshairX')
+    .attr('class', 'crosshair');
+crosshairGroup.append('line')
+    .attr('id', 'crosshairY')
+    .attr('class', 'crosshair');
+
+// register mouse-move event handler for crosshairs
+svg.on("mousemove", function() {
+    var [mouseX, mouseY] = d3.mouse(this);
+    crosshairGroup.select("#crosshairX")
+        .attr("x1", 0)
+        .attr("x2", chart.width)
+        .attr("y1", mouseY)
+        .attr("y2", mouseY);
+    crosshairGroup.select("#crosshairY")
+        .attr("x1", mouseX)
+        .attr("x2", mouseX)
+        .attr("y1", 0)
+        .attr("y2", chart.height);
+});
+
+// shadows
+var shadowGroup = svg.append('g').attr("id", "shadowGroup");
+
+// candles
+var candleGroup = svg.append('g').attr("id", "candleGroup");
+
+// data parser
 var formatRow = function(d) {
-    d.L = +d.L;
-    d.H = +d.H;
-    d.O = +d.O;
-    d.C = +d.C;
-    d.V = +d.V;
-    d.BV = +d.BV;
     d.T = d3.time.format("%Y-%m-%dT%H:%M:%S").parse(d.T);
     d.bullish = d.O < d.C;
 }
-var setXDomain = function(scale, dataset) {
-        var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
-        var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
-        var minDate2 = new Date(minDate.getTime() - intervalMs/2);
-        var maxDate2 = new Date(maxDate.getTime() + intervalMs/2);
-        scale.domain([minDate2, maxDate2]);
-}
 
-var setYDomain = function(scale, dataset) {
-        var min = d3.min(dataset, function(d) { return  d.L; });
-        var max = d3.max(dataset, function(d) { return  d.H; });
-        scale.domain([min, max]);
+// functions to calculate new domains
+var calcXDomain = function(dataset) {
+    var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
+    var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
+    return [
+       new Date(minDate.getTime() - intervalMs/2),
+       new Date(maxDate.getTime() + intervalMs/2)
+    ];
+}
+var calcYDomain = function(dataset) {
+    return [
+        d3.min(dataset, function(d) { return  d.L; }),
+        d3.max(dataset, function(d) { return  d.H; })
+    ];
 }
 
 var candleAttrs = {
-    class: function(d) {
-        return "candle " + (d.bullish ? "bullish" : "bearish");},
-    x: function(d) {return xScale(d.T)-(barWidth/2);},
-    y: function(d) {return Math.min(yScale(+d.O), yScale(+d.C));},
+    class:  function(d) {return "candle " + (d.bullish ? "bullish" : "bearish");},
+    transform: "translate(" + padding.left + ", " + padding.top + ")",
+    x:      function(d) {return xScale(d.T)-(barWidth/2);},
+    y:      function(d) {return Math.min(yScale(+d.O), yScale(+d.C));},
     height: function(d) {return Math.abs(yScale(d.O) - yScale(d.C)) + minimumCandleHeight;},
-    width: function(d) {return barWidth;},
+    width:  function(d) {return barWidth;}
 }
 
+var shadowAttrs = {
+    class:          "shadow",
+    transform:      "translate(" + padding.left + ", " + padding.top + ")",
+    x1:             function(d) {return xScale(d.T);},
+    y1:             function(d) {return yScale(d.H);},
+    x2:             function(d) {return xScale(d.T);},
+    y2:             function(d) {return yScale(d.L);},
+    stroke:         "black",
+    "stroke-width": "1"
+}
+
+// start loading the currency exchange dataset
 d3.json("data/30minutes.json", function(data) {
-    // dataset from currency exchange
-    dataset = data.result.slice(-100, -1);
+    dataset = data.result.slice(-100, -1); // use fragment
     // format dataset
     dataset.forEach(formatRow);
-    // data analysis
-    var min = d3.min(dataset, function(d) { return  d.L; });
-    var max = d3.max(dataset, function(d) { return  d.H; });
-    var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
-    var bins = dataset.length;
-    barWidth = (chartWidth/bins) - (space/2);
-    var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
-    var minDate2 = new Date(minDate.getTime() - intervalMs/2);
-    var maxDate2 = new Date(maxDate.getTime() + intervalMs/2);
+    // reset bar-width
+    barWidth = (chart.width / dataset.length) - (space / 2);
 
-
-    // scales
-    setYDomain(yScale, dataset);
-    setXDomain(xScale, dataset);
-
-    // crosshairs
-    var focus = chart.append('g')
-        .attr("id", "crosshairGroup");
-    focus.append('line')
-        .attr('id', 'crosshairX')
-        .attr('class', 'crosshair');
-    focus.append('line')
-        .attr('id', 'crosshairY')
-        .attr('class', 'crosshair');
-    chart.on("mousemove", function() {
-        var [mouseX, mouseY] = d3.mouse(this);
-        focus.select("#crosshairX")
-            .attr("x1", 0)
-            .attr("x2", chartWidth)
-            .attr("y1", mouseY)
-            .attr("y2", mouseY);
-        focus.select("#crosshairY")
-            .attr("x1", mouseX)
-            .attr("x2", mouseX)
-            .attr("y1", 0)
-            .attr("y2", chartHeight);
-    });
-
-
-    // draw axis
-    // Y axis
-    yAxis.scale(yScale);
-    yAxisGroup.call(yAxis);
-    // X axis - minutes
+    // recalculate scale.domain, the axis and their groups
+    xScale.domain(calcXDomain(dataset))
+    yScale.domain(calcYDomain(dataset))
     xAxisTime.scale(xScale);
     xAxisTimeGroup.call(xAxisTime);
-    // X axis - date
     xAxisDate.scale(xScale);
     xAxisDateGroup.call(xAxisDate);
+    yAxis.scale(yScale);
+    yAxisGroup.call(yAxis);
 
-
-    // shadow lines
-    chart.append('g').attr("id", "shadowGroup")
+    // draw shadow lines
+    shadowGroup
         .selectAll("line.shadow")
         .data(dataset)
         .enter()
         .append("line")
-            .attr("class", "shadow")
-            .attr("transform", "translate(" + paddingLeft + ", " + paddingTop + ")")
-            .attr("x1", function(d) {return xScale(d.T);})
-            .attr("y1", function(d) {return yScale(d.H);})
-            .attr("x2", function(d) {return xScale(d.T);})
-            .attr("y2", function(d) {return yScale(d.L);})
-            .attr("stroke", "black")
-            .attr("stroke-width", 1);
+            .attr(shadowAttrs);
 
-    // candles
-    chart.append('g').attr("id", "candleGroup")
+    // draw candles
+    candleGroup
         .selectAll("rect.candle")
         .data(dataset)
         .enter()
         .append("rect")
-            .attr("transform", "translate(" + paddingLeft + ", " + paddingTop + ")")
             .attr(candleAttrs);
 });
 
 function updateData() {
     // Get the data again
     d3.json("data/30minutes.json", function(error, data) {
+        // add new dataelements to existing dataset (and format them)
         var newDataset = data.result.slice(-300, -1);
         newDataset.forEach(function(d) {formatRow(d); dataset.push(d);});
-        barWidth = chartWidth / dataset.length;
+        // reset bar-width
+        barWidth = chart.width / dataset.length;
 
         // Scale the range of the data again
-        setXDomain(xScale, dataset);
-        setYDomain(yScale, dataset);
+        xScale.domain(calcXDomain(dataset));
+        yScale.domain(calcYDomain(dataset));
 
         // Select the section we want to apply our changes to
-        var chartTransition = chart.transition();
+        var chartTransition = svg.transition();
         var duration = 750;
 
         // update existing candles
         /*
-        var z = chart.selectAll("rect.candle")
+        var z = svg.selectAll("rect.candle")
             .data(dataset)
             .enter()
             .append("rect");
@@ -179,14 +176,15 @@ function updateData() {
             .attr(candleAttrs);
         // update existing shadows
         chartTransition.selectAll("line.shadow").duration(duration)
-            .attr("x1", function(d) {return xScale(d.T);})
-            .attr("y1", function(d) {return yScale(d.H);})
-            .attr("x2", function(d) {return xScale(d.T);})
-            .attr("y2", function(d) {return yScale(d.L);})
+            .attr(shadowAttrs);
+
         // update axes
-        chartTransition.select("#xAxisDateGroup").duration(duration).call(xAxisDate);
-        chartTransition.select("#xAxisTimeGroup").duration(duration).call(xAxisTime);
-        chartTransition.select("#yAxisGroup").duration(duration).call(yAxis);
+        chartTransition.select("#xAxisDateGroup").duration(duration)
+            .call(xAxisDate);
+        chartTransition.select("#xAxisTimeGroup").duration(duration)
+            .call(xAxisTime);
+        chartTransition.select("#yAxisGroup").duration(duration)
+            .call(yAxis);
 
     });
 }
