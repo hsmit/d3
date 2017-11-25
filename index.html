@@ -8,7 +8,10 @@
     </head>
     <body>
         <h1>D3.js Candlestick Chart</h1>
-        <div id="reload"><input name="reload" type="button" value="reload" onclick="updateData()" /></div>
+        <div id="nav">
+            <input name="left" type="button" value="< left" onclick="moveLeft()" />
+            <input name="right" type="button" value="right >" onclick="moveRight()" />
+        </div>
         <script type="text/javascript" src="candlestick.js"></script>
         <p>Hannes Smit</p>
     </body>

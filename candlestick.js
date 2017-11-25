@@ -7,7 +7,14 @@ var space   = 4,
     minimumCandleHeight = 0.1;
 
 var barWidth = 0;
+var datasetComplete;
 var dataset;
+var stepSize = 30;
+
+var autoYScale = false;
+
+var dataRange = {min: -1900, max: -1800};
+var originalSize = 0;
 
 // svg chart
 var svg = d3.select("body")
@@ -62,7 +69,6 @@ svg.on("mousemove", function() {
         .attr("y1", 0)
         .attr("y2", chart.height);
 });
-
 // shadows
 var shadowGroup = svg.append('g').attr("id", "shadowGroup");
 
@@ -85,10 +91,17 @@ var calcXDomain = function(dataset) {
     ];
 }
 var calcYDomain = function(dataset) {
-    return [
-        d3.min(dataset, function(d) { return  d.L; }),
-        d3.max(dataset, function(d) { return  d.H; })
-    ];
+    if (autoYScale) {
+        return [
+            d3.min(dataset, function(d) { return  d.L; }),
+            d3.max(dataset, function(d) { return  d.H; })
+        ];
+    } else {
+        return [
+                d3.min(datasetComplete, function(d) { return  d.L; }),
+                d3.max(datasetComplete, function(d) { return  d.H; })
+        ];
+    }
 }
 
 var candleAttrs = {
@@ -113,7 +126,9 @@ var shadowAttrs = {
 
 // start loading the currency exchange dataset
 d3.json("data/30minutes.json", function(data) {
-    dataset = data.result.slice(-100, -1); // use fragment
+    datasetComplete = data.result;
+    originalSize = datasetComplete.length;
+    dataset = data.result.slice(dataRange.min, dataRange.max); // use fragment
     // format dataset
     dataset.forEach(formatRow);
     // reset bar-width
@@ -146,45 +161,67 @@ d3.json("data/30minutes.json", function(data) {
             .attr(candleAttrs);
 });
 
-function updateData() {
+function redrawData() {
+
+    // reset bar-width
+    barWidth = chart.width / dataset.length;
+
+    // add new data to the candles
+    var cd = svg.selectAll("rect.candle").data(dataset);
+    cd.exit().remove();
+    cd.enter().append("rect").attr(candleAttrs);
+
+    // add new data to the shadows
+    var ld = svg.selectAll("line.shadow").data(dataset);
+    ld.exit().remove();
+    ld.enter().append("line").attr(shadowAttrs);
+
+    // Scale the range of the data again
+    xScale.domain(calcXDomain(dataset));
+    yScale.domain(calcYDomain(dataset));
+
+    // Select the section we want to apply our changes to
+    var chartTransition = svg.transition();
+    var duration = 70;
+
+    // update existing candles according to new scales
+    //chartTransition.selectAll("rect.candle").duration(duration).attr(candleAttrs);
+    svg.selectAll("rect.candle").transition().duration(duration).attr(candleAttrs);
+    // update existing shadows according to new scales
+    //chartTransition.selectAll("line.shadow").duration(duration).attr(shadowAttrs);
+    svg.selectAll("line.shadow").transition().duration(duration).attr(shadowAttrs);
+
+    // update axes
+    chartTransition.select("#xAxisDateGroup").duration(duration)
+        .call(xAxisDate);
+    chartTransition.select("#xAxisTimeGroup").duration(duration)
+        .call(xAxisTime);
+    chartTransition.select("#yAxisGroup").duration(duration)
+        .call(yAxis);
+}
+
+function moveRight() {
     // Get the data again
     d3.json("data/30minutes.json", function(error, data) {
-        // add new dataelements to existing dataset (and format them)
-        var newDataset = data.result.slice(-300, -1);
-        newDataset.forEach(function(d) {formatRow(d); dataset.push(d);});
-        // reset bar-width
-        barWidth = chart.width / dataset.length;
 
-        // Scale the range of the data again
-        xScale.domain(calcXDomain(dataset));
-        yScale.domain(calcYDomain(dataset));
+        dataRange.min = dataRange.min+stepSize;
+        dataRange.max = dataRange.max+stepSize;
 
-        // Select the section we want to apply our changes to
-        var chartTransition = svg.transition();
-        var duration = 750;
+        dataset = data.result.slice(dataRange.min, dataRange.max);
+        dataset.forEach(formatRow);
+        redrawData();
+    });
+}
 
-        // update existing candles
-        /*
-        var z = svg.selectAll("rect.candle")
-            .data(dataset)
-            .enter()
-            .append("rect");
-        z.transition().duration(duration)
-            .attr(candleAttrs);
-             */
-        chartTransition.selectAll("rect.candle").duration(duration)
-            .attr(candleAttrs);
-        // update existing shadows
-        chartTransition.selectAll("line.shadow").duration(duration)
-            .attr(shadowAttrs);
+function moveLeft() {
+    // Get the data again
+    d3.json("data/30minutes.json", function(error, data) {
 
-        // update axes
-        chartTransition.select("#xAxisDateGroup").duration(duration)
-            .call(xAxisDate);
-        chartTransition.select("#xAxisTimeGroup").duration(duration)
-            .call(xAxisTime);
-        chartTransition.select("#yAxisGroup").duration(duration)
-            .call(yAxis);
+        dataRange.min = dataRange.min-stepSize;
+        dataRange.max = dataRange.max-stepSize;
 
+        dataset = data.result.slice(dataRange.min, dataRange.max);
+        dataset.forEach(formatRow);
+        redrawData();
     });
 }
