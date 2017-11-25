@@ -46,65 +46,104 @@
     </head>
     <body>
         <h1>D3.js Candlestick Chart</h1>
-        
+
         <script type="text/javascript">
-           
-           
+
+
+            // sizes
+            var marginRight = 90, marginBottom = 63, space = 4,
+                paddingLeft = 5, paddingRight = 5, paddingTop = 5, paddingBottom = 5,
+                chartWidth = 555, chartHeight = 360,
+                yearOffset = 35,
+                minimumCandleHeight = 0.1,
+                svgWidth = chartWidth + marginRight,
+                svgHeight = chartHeight + marginBottom;
+            var barWidth = 0;
+            var dataset;
+
+            // svg chart
+            var chart = d3.select("body")
+                .append("svg")
+                    .attr("width", svgWidth)
+                    .attr("height", svgHeight);
+        
+            // scale
+            var yScale = d3.scale.linear().range([chartHeight, 0]); // domain is dataset-dependent
+            var xScale = d3.time.scale().range([0, chartWidth]); // domain is dataset-dependent
+            // axis layout
+            var xAxisTime = d3.svg.axis().orient("bottom").ticks(8).tickFormat(d3.time.format("%H:%M"));
+            var xAxisDate = d3.svg.axis().orient("bottom").ticks(d3.time.days, 1).tickFormat(d3.time.format("%Y-%m-%d"));
+            var yAxis = d3.svg.axis().orient("right").ticks(5).tickFormat(d3.format(".8f"));
+            // axis group
+            var xAxisTimeGroup = chart.append("g")
+                .attr("transform", "translate("+paddingLeft+", " + (chartHeight+10)+ ")")
+                .attr("id", "xAxisTimeGroup")
+                .attr("class", "axis time");        
+            var xAxisDateGroup = chart.append("g")
+                .attr("transform", "translate("+paddingLeft+", " + (chartHeight+yearOffset)+ ")")
+                .attr("id", "xAxisDateGroup")
+                .attr("class", "axis day");	
+            var yAxisGroup = chart.append("g")
+                .attr("transform", "translate(" + (paddingLeft + chartWidth + paddingRight)+ ", " + paddingTop + " )")
+                .attr("id", "yAxisGroup")
+                .attr("class", "axis y");
+
+            var formatRow = function(d) {
+                d.L = +d.L;
+                d.H = +d.H;
+                d.O = +d.O;
+                d.C = +d.C;
+                d.V = +d.V;
+                d.BV = +d.BV;
+                d.T = d3.time.format("%Y-%m-%dT%H:%M:%S").parse(d.T);
+                d.bullish = d.O < d.C;
+            }
+            var setXDomain = function(scale, dataset) {
+                    var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
+                    var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
+                    var minDate2 = new Date(minDate.getTime() - intervalMs/2);
+                    var maxDate2 = new Date(maxDate.getTime() + intervalMs/2);
+                    scale.domain([minDate2, maxDate2]);
+            }
+
+            var setYDomain = function(scale, dataset) {
+                    var min = d3.min(dataset, function(d) { return  d.L; });
+                    var max = d3.max(dataset, function(d) { return  d.H; });
+                    scale.domain([min, max]);
+            }
+
+            var candleAttrs = {
+                class: function(d) { 
+                    return "candle " + (d.bullish ? "bullish" : "bearish");},
+                x: function(d) {return xScale(d.T)-(barWidth/2);},
+                y: function(d) {return Math.min(yScale(+d.O), yScale(+d.C));},
+                height: function(d) {return Math.abs(yScale(d.O) - yScale(d.C)) + minimumCandleHeight;},
+                width: function(d) {return barWidth;},
+            }
+
             d3.json("data/30minutes.json", function(data) {
                 // dataset from currency exchange
-                var dataset = data.result.slice(-100, -1);
-                
-                // sizes
-                var marginRight = 90, marginBottom = 63, space = 4,
-                    paddingLeft = 5, paddingRight = 5, paddingTop = 5, paddingBottom = 5,
-                    chartWidth = 555, chartHeight = 360,
-                    yearOffset = 35,
-                    minimumCandleHeight = 0.1,
-                    svgWidth = chartWidth + marginRight,
-                    svgHeight = chartHeight + marginBottom;
-
-                    
+                dataset = data.result.slice(-100, -1);
                 // format dataset
-                dataset.forEach(function(d) {
-                    d.L = +d.L;
-                    d.H = +d.H;
-                    d.O = +d.O;
-                    d.C = +d.C;
-                    d.V = +d.V;
-                    d.BV = +d.BV;
-                    d.T = d3.time.format("%Y-%m-%dT%H:%M:%S").parse(d.T);
-                    d.bullish = d.O < d.C;
-                });
-
-                
+                dataset.forEach(formatRow);
                 // data analysis   
                 var min = d3.min(dataset, function(d) { return  d.L; });
                 var max = d3.max(dataset, function(d) { return  d.H; });
                 var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
                 var bins = dataset.length;
-                var barWidth = (chartWidth/bins) - (space/2);
+                barWidth = (chartWidth/bins) - (space/2);
                 var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
                 var minDate2 = new Date(minDate.getTime() - intervalMs/2);
                 var maxDate2 = new Date(maxDate.getTime() + intervalMs/2);
                 
-                
+
                 // scales
-                var yScale = d3.scale.linear()
-                    .domain([min, max]).range([chartHeight, 0]);
-                var xScale = d3.time.scale()
-                    .domain([minDate2, maxDate2])
-                    .range([0, chartWidth]);
-
-
-                // SVG chart
-                var chart = d3.select("body")
-                    .append("svg")
-                    .attr("width", svgWidth)
-                    .attr("height", svgHeight);
-
+                setYDomain(yScale, dataset);
+                setXDomain(xScale, dataset);
 
                 // crosshairs
-                var focus = chart.append('g');
+                var focus = chart.append('g')
+                    .attr("id", "crosshairGroup");
                 focus.append('line')
                     .attr('id', 'crosshairX')
                     .attr('class', 'crosshair');
@@ -124,45 +163,23 @@
                         .attr("y1", 0)
                         .attr("y2", chartHeight);
                 });
-                
-                    
+
+
                 // draw axis
                 // Y axis
-                var yAxis = d3.svg.axis()
-                    .scale(yScale)
-                    .orient("right")
-                    .ticks(5)
-                    .tickFormat(d3.format(".8f"));
-                chart.append("g")
-                    .attr("transform", "translate(" + (paddingLeft + chartWidth + paddingRight)+ ", " + paddingTop + " )")
-                    .style("fill", "black")	
-                    .attr("class", "axis")	
-                    .call(yAxis);
+                yAxis.scale(yScale);
+                yAxisGroup.call(yAxis);
                 // X axis - minutes
-                var xAxisTime = d3.svg.axis()
-                    .scale(xScale)
-                    .orient("bottom")
-                    .ticks(8)
-                    .tickFormat(d3.time.format("%H:%M"));
-                chart.append("g")
-                    .attr("transform", "translate("+paddingLeft+", " + (chartHeight+10)+ ")")
-                    .style("fill", "black")	
-                    .attr("class", "axis")	
-                    .call(xAxisTime);
+                xAxisTime.scale(xScale);
+                xAxisTimeGroup.call(xAxisTime);
                 // X axis - date
-                var xAxisDate = d3.svg.axis()
-                    .scale(xScale)
-                    .orient("bottom")
-                    .ticks(d3.time.days, 1)
-                    .tickFormat(d3.time.format("%Y-%m-%d"));
-                chart.append("g")
-                    .attr("transform", "translate("+paddingLeft+", " + (chartHeight+yearOffset)+ ")")
-                    .attr("class", "axis day")	
-                    .call(xAxisDate);
-                    
+                xAxisDate.scale(xScale);
+                xAxisDateGroup.call(xAxisDate);
 
-                // shadow lines          
-                chart.selectAll("line.shadow")
+
+                // shadow lines
+                chart.append('g').attr("id", "shadowGroup")
+                    .selectAll("line.shadow")
                     .data(dataset)
                     .enter()
                     .append("line")
@@ -175,20 +192,14 @@
                         .attr("stroke", "black")
                         .attr("stroke-width", 1);
 
-
                 // candles
-                chart.selectAll("rect.candle")
+                chart.append('g').attr("id", "candleGroup")
+                    .selectAll("rect.candle")
                     .data(dataset)
                     .enter()
                     .append("rect")
-                        .attr("class", function(d) { return "candle " + (d.bullish ? "bullish" : "bearish");})
                         .attr("transform", "translate(" + paddingLeft + ", " + paddingTop + ")")
-                        .attr("x", function(d) {return xScale(d.T)-(barWidth/2);})
-                        .attr("y", function(d, i) {return Math.min(yScale(+d.O), yScale(+d.C)); })
-                        .attr("height", function(d) {
-                            return Math.abs(yScale(d.O) - yScale(d.C)) + minimumCandleHeight; 
-                        })
-                        .attr("width", barWidth);
+                        .attr(candleAttrs);
             });
         </script>
         <p>Hannes Smit</p>
