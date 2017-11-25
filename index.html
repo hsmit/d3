@@ -46,7 +46,9 @@
     </head>
     <body>
         <h1>D3.js Candlestick Chart</h1>
-
+        <div id="reload">
+            <input name="reload" type="button" value="reload" onclick="updateData()" />
+        </div>
         <script type="text/javascript">
 
 
@@ -201,6 +203,46 @@
                         .attr("transform", "translate(" + paddingLeft + ", " + paddingTop + ")")
                         .attr(candleAttrs);
             });
+            
+            function updateData() {
+                // Get the data again
+                d3.json("data/30minutes.json", function(error, data) {
+                    var newDataset = data.result.slice(-300, -1);
+                    newDataset.forEach(function(d) {formatRow(d); dataset.push(d);});
+                    barWidth = chartWidth / dataset.length;
+                    
+                    // Scale the range of the data again 
+                    setXDomain(xScale, dataset);
+                    setYDomain(yScale, dataset);
+                    
+                    // Select the section we want to apply our changes to
+                    var chartTransition = chart.transition();
+                    var duration = 750;
+
+                    // update existing candles
+                    /*
+                    var z = chart.selectAll("rect.candle")
+                        .data(dataset)
+                        .enter()
+                        .append("rect");
+                    z.transition().duration(duration)
+                        .attr(candleAttrs);
+                         */
+                    chartTransition.selectAll("rect.candle").duration(duration)
+                        .attr(candleAttrs);
+                    // update existing shadows
+                    chartTransition.selectAll("line.shadow").duration(duration)
+                        .attr("x1", function(d) {return xScale(d.T);})
+                        .attr("y1", function(d) {return yScale(d.H);})
+                        .attr("x2", function(d) {return xScale(d.T);})
+                        .attr("y2", function(d) {return yScale(d.L);})
+                    // update axes
+                    chartTransition.select("#xAxisDateGroup").duration(duration).call(xAxisDate);
+                    chartTransition.select("#xAxisTimeGroup").duration(duration).call(xAxisTime);
+                    chartTransition.select("#yAxisGroup").duration(duration).call(yAxis);
+            
+                });
+            }
         </script>
         <p>Hannes Smit</p>
     </body>
