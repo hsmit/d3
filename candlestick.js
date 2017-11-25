@@ -1,5 +1,5 @@
 // chart sizes
-var space   = 4,
+var space   = 7,
     margin  = {right: 90, bottom: 60}
     padding = {left: 5, right: 5, top: 5, bottom: 5},
     chart   = {width: 555, height: 360},
@@ -9,11 +9,11 @@ var space   = 4,
 var barWidth = 0;
 var datasetComplete;
 var dataset;
-var stepSize = 30;
 
 var autoYScale = false;
 
-var dataRange = {min: -1900, max: -1800};
+var stepSize = 30;
+var dataRange = {min: -1300, max: -1200};
 var originalSize = 0;
 
 // svg chart
@@ -82,7 +82,7 @@ var formatRow = function(d) {
 }
 
 // functions to calculate new domains
-var calcXDomain = function(dataset) {
+var calcXDomain = function() {
     var [minDate, maxDate] = d3.extent(dataset, function(d) { return d.T;});
     var intervalMs = dataset[1].T.getTime() - dataset[0].T.getTime();
     return [
@@ -90,7 +90,7 @@ var calcXDomain = function(dataset) {
        new Date(maxDate.getTime() + intervalMs/2)
     ];
 }
-var calcYDomain = function(dataset) {
+var calcYDomain = function() {
     if (autoYScale) {
         return [
             d3.min(dataset, function(d) { return  d.L; }),
@@ -98,8 +98,8 @@ var calcYDomain = function(dataset) {
         ];
     } else {
         return [
-                d3.min(datasetComplete, function(d) { return  d.L; }),
-                d3.max(datasetComplete, function(d) { return  d.H; })
+            d3.min(datasetComplete, function(d) { return  d.L; }),
+            d3.max(datasetComplete, function(d) { return  d.H; })
         ];
     }
 }
@@ -135,8 +135,8 @@ d3.json("data/30minutes.json", function(data) {
     barWidth = (chart.width / dataset.length) - (space / 2);
 
     // recalculate scale.domain, the axis and their groups
-    xScale.domain(calcXDomain(dataset))
-    yScale.domain(calcYDomain(dataset))
+    xScale.domain(calcXDomain())
+    yScale.domain(calcYDomain())
     xAxisTime.scale(xScale);
     xAxisTimeGroup.call(xAxisTime);
     xAxisDate.scale(xScale);
@@ -177,8 +177,8 @@ function redrawData() {
     ld.enter().append("line").attr(shadowAttrs);
 
     // Scale the range of the data again
-    xScale.domain(calcXDomain(dataset));
-    yScale.domain(calcYDomain(dataset));
+    xScale.domain(calcXDomain());
+    yScale.domain(calcYDomain());
 
     // Select the section we want to apply our changes to
     var chartTransition = svg.transition();
@@ -224,4 +224,9 @@ function moveLeft() {
         dataset.forEach(formatRow);
         redrawData();
     });
+}
+
+function setAutoYScale() {
+    autoYScale = !autoYScale;
+    redrawData();
 }
